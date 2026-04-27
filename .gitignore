@@ -1,0 +1,45 @@
+# ── Python ────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+dist/
+build/
+venv/
+.venv/
+
+# ── Environment / Secrets (NEVER COMMIT) ─────
+.env
+.env.local
+.env.*.local
+*.env
+
+# ── Data & Model artifacts (large files) ──────
+data/cache/
+models/*.pt
+models/*.pkl
+*.zarr/
+*.zarr
+*.nc
+*.h5
+*.hdf5
+
+# ── Frontend build artifacts ──────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+
+# ── OS / Editor ───────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Logs ──────────────────────────────────────
+*.log
+npm-debug.log*
