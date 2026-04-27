@@ -59,11 +59,50 @@
   --font-mono: 'JetBrains Mono', monospace;
 }
 
-/* ── Reset ────────────────────────────────────────────── */
+/* ── Dark Theme (activated via data-theme="dark" on <html>) ── */
+[data-theme="dark"] {
+  --bg-primary: #0B1120;
+  --bg-secondary: #111827;
+  --bg-tertiary: #1A2539;
+  --bg-card: rgba(17, 24, 39, 0.97);
+  --bg-glass: rgba(11, 17, 32, 0.88);
+
+  --text-primary: #F1F5F9;
+  --text-secondary: #94A3B8;
+  --text-muted: #4B5563;
+  --text-accent: #60A5FA;
+
+  --color-normal: #22C55E;
+  --color-watch: #FBBF24;
+  --color-warning: #F87171;
+  --color-extreme: #C4B5FD;
+  --color-extreme-glow: rgba(196, 181, 253, 0.2);
+
+  --gradient-primary: linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%);
+  --gradient-aurora: linear-gradient(135deg, #7C3AED 0%, #C4B5FD 100%);
+
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-active: rgba(96, 165, 250, 0.5);
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 2px 12px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 4px 24px rgba(0, 0, 0, 0.7);
+  --shadow-glow: 0 0 24px rgba(96, 165, 250, 0.12);
+}
+
+/* ── Reset ────────────────────────────────────────── */
 *, *::before, *::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  /* Smooth all colour + shadow changes on theme switch */
+  transition:
+    background-color 300ms ease,
+    background 300ms ease,
+    color 300ms ease,
+    border-color 300ms ease,
+    box-shadow 300ms ease,
+    fill 300ms ease;
 }
 
 html {
@@ -90,14 +129,14 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #F1F5F9;
+  background: var(--bg-tertiary);
 }
 ::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
+  background: var(--border-subtle);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94A3B8;
+  background: var(--text-muted);
 }
 
 /* ── Layout ───────────────────────────────────────────── */

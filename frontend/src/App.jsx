@@ -13,6 +13,7 @@ import {
   generateDemoGeoJSON, generateDemoExplanation,
   generateDemoForecast, generateDemoAlerts
 } from './demoData';
+import './theme-toggle.css';
 
 const SEVERITY_ORDER = { extreme: 3, warning: 2, watch: 1, normal: 0 };
 
@@ -32,6 +33,21 @@ export default function App() {
   const [demoMode, setDemoMode] = useState(false);
   const [mapStyle, setMapStyle] = useState('heatmap');
   const [error, setError] = useState(null);
+
+  // ── Theme (dark / light) ─────────────────────────────────────
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const [darkMode, setDarkMode] = useState(
+    () => localStorage.getItem('cg-theme')
+      ? localStorage.getItem('cg-theme') === 'dark'
+      : prefersDark
+  );
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
+    localStorage.setItem('cg-theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
+
+  function toggleTheme() { setDarkMode(d => !d); }
 
   const wsRef = useRef(null);
 
@@ -245,6 +261,20 @@ export default function App() {
             <div className={`status-dot ${backendConnected ? '' : 'offline'}`} />
             {backendConnected ? 'API Connected' : 'API Disconnected'}
           </div>
+
+          {/* ── Theme Toggle ── */}
+          <button
+            className="theme-toggle"
+            onClick={toggleTheme}
+            aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            <div className="theme-toggle-track">
+              <div className="theme-toggle-thumb" />
+            </div>
+            <span className="theme-toggle-icon">{darkMode ? '🌙' : '☀️'}</span>
+            <span>{darkMode ? 'Dark' : 'Light'}</span>
+          </button>
         </div>
       </header>
 
