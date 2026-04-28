@@ -1,0 +1,71 @@
+{
+  "name": "02 Anomaly Detection",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "detect",
+        "responseMode": "responseNode"
+      },
+      "name": "Webhook POST /detect",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.item.json.body || {};\nconst algorithm = body.algorithm || 'isolation_forest';\nif (!['isolation_forest', 'autoencoder'].includes(algorithm)) throw new Error('Invalid algorithm');\nreturn { region_id: body.region_id || null, algorithm, threshold: body.threshold || 0.05 };"
+      },
+      "name": "Validate Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ml-service:8001/detect",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json)}}"
+      },
+      "name": "POST ml-service/detect",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const geojson = $input.item.json;\ngeojson.metadata = {\n  generated_at: new Date().toISOString(),\n  algorithm: $('Validate Body').item.json.algorithm,\n  threshold: $('Validate Body').item.json.threshold,\n  stats: { total: 0, watch: 0, warning: 0, extreme: 0 }\n};\nreturn geojson;"
+      },
+      "name": "Enrich GeoJSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify($json)}}"
+      },
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "Webhook POST /detect": {
+      "main": [ [ { "node": "Validate Body", "type": "main", "index": 0 } ] ]
+    },
+    "Validate Body": {
+      "main": [ [ { "node": "POST ml-service/detect", "type": "main", "index": 0 } ] ]
+    },
+    "POST ml-service/detect": {
+      "main": [ [ { "node": "Enrich GeoJSON", "type": "main", "index": 0 } ] ]
+    },
+    "Enrich GeoJSON": {
+      "main": [ [ { "node": "Respond to Webhook", "type": "main", "index": 0 } ] ]
+    }
+  }
+}

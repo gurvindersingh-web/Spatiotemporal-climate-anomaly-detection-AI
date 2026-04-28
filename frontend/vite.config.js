@@ -1,36 +1,18 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export default defineConfig({
   plugins: [react()],
-  server: {
-    port: 5173,
-    proxy: {
-      '/health': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/detect': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/explain': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/forecast': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/alerts': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/ws': {
-        target: 'ws://localhost:8000',
-        ws: true,
-        changeOrigin: true,
-      },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
     },
   },
 })
+
+// Forced restart to load tailwind and postcss config

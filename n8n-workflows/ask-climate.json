@@ -1,0 +1,55 @@
+{
+  "name": "Ask Climate Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ask-climate",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "webhookId": "ask-climate-id"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={{$env.GEMINI_KEY}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "contents",
+              "value": "={{[{role: 'user', parts: [{text: 'You are a helpful climate AI assistant. Answer this question in 3-4 sentences. Question: ' + $json.body.question + '\\nContext: ' + JSON.stringify($json.body.context_data)}]}]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Gemini API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const geminiRaw = $input.item.json;\nlet answer = \"Sorry, I couldn't generate an answer.\";\ntry {\n  answer = geminiRaw.candidates[0].content.parts[0].text;\n} catch(e) {}\nreturn { json: { answer } };"
+      },
+      "name": "Format Answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [ [ { "node": "Gemini API", "type": "main", "index": 0 } ] ]
+    },
+    "Gemini API": {
+      "main": [ [ { "node": "Format Answer", "type": "main", "index": 0 } ] ]
+    }
+  }
+}

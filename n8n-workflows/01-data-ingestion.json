@@ -1,0 +1,146 @@
+{
+  "name": "01 Data Ingestion",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  { id: 'north-india', lat: 28.6, lon: 77.2, label: 'North India' },\n  { id: 'south-india', lat: 12.9, lon: 77.6, label: 'South India' },\n  { id: 'west-india', lat: 23.0, lon: 72.6, label: 'West India' },\n  { id: 'east-india', lat: 22.5, lon: 88.3, label: 'East India' },\n  { id: 'central-india', lat: 21.1, lon: 79.1, label: 'Central India' },\n  { id: 'ne-india', lat: 26.1, lon: 91.7, label: 'NE India' }\n];"
+      },
+      "name": "Define Regions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.open-meteo.com/v1/forecast",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "latitude", "value": "={{$json.lat}}" },
+            { "name": "longitude", "value": "={{$json.lon}}" },
+            { "name": "hourly", "value": "temperature_2m,precipitation,windspeed_10m,relativehumidity_2m,surface_pressure,cloudcover,et0_fao_evapotranspiration" },
+            { "name": "daily", "value": "temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max" },
+            { "name": "past_days", "value": "30" },
+            { "name": "forecast_days", "value": "7" },
+            { "name": "timezone", "value": "auto" }
+          ]
+        }
+      },
+      "name": "Fetch Open-Meteo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.item.json;\nconst hourly_rows = data.hourly.time.map((time, i) => ({\n  time,\n  region_id: $('Define Regions').item.json.id,\n  temperature_2m: data.hourly.temperature_2m[i],\n  precipitation: data.hourly.precipitation[i]\n}));\nreturn { hourly_rows };"
+      },
+      "name": "Flatten Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ml-service:8001/ingest",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "data", "value": "={{$json.hourly_rows}}" }
+          ]
+        }
+      },
+      "name": "POST /ingest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ml-service:8001/detect",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"region_id\": \"{{$('Define Regions').item.json.id}}\", \"auto_trigger\": true }"
+      },
+      "name": "POST /detect",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const geojson = $input.item.json;\nconst extremes = (geojson.features || []).filter(f => f.properties.severity === 'extreme');\nreturn { trigger_alert: extremes.length > 0, extreme_count: extremes.length, geojson };"
+      },
+      "name": "Filter Extremes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            { "value1": "={{$json.trigger_alert}}", "value2": true }
+          ]
+        }
+      },
+      "name": "IF trigger_alert",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1650, 300]
+    },
+    {
+      "parameters": {
+        "workflowId": "ClimateGuard - 05 Alerts & Dispatch"
+      },
+      "name": "Execute Alerts Workflow",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1850, 200]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [ [ { "node": "Define Regions", "type": "main", "index": 0 } ] ]
+    },
+    "Define Regions": {
+      "main": [ [ { "node": "Fetch Open-Meteo", "type": "main", "index": 0 } ] ]
+    },
+    "Fetch Open-Meteo": {
+      "main": [ [ { "node": "Flatten Data", "type": "main", "index": 0 } ] ]
+    },
+    "Flatten Data": {
+      "main": [ [ { "node": "POST /ingest", "type": "main", "index": 0 } ] ]
+    },
+    "POST /ingest": {
+      "main": [ [ { "node": "POST /detect", "type": "main", "index": 0 } ] ]
+    },
+    "POST /detect": {
+      "main": [ [ { "node": "Filter Extremes", "type": "main", "index": 0 } ] ]
+    },
+    "Filter Extremes": {
+      "main": [ [ { "node": "IF trigger_alert", "type": "main", "index": 0 } ] ]
+    },
+    "IF trigger_alert": {
+      "main": [ [ { "node": "Execute Alerts Workflow", "type": "main", "index": 0 } ] ]
+    }
+  }
+}

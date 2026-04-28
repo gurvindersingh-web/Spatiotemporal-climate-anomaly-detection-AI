@@ -1,0 +1,97 @@
+{
+  "name": "04 Forecasting",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "forecast/:region_id",
+        "responseMode": "responseNode"
+      },
+      "name": "Webhook GET /forecast",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const region_id = $input.item.json.params.region_id;\nconst horizon = parseInt($input.item.json.query.horizon) || 7;\nconst variable = $input.item.json.query.variable || 'temperature_2m';\nconst alpha = parseFloat($input.item.json.query.alpha) || 0.1;\nreturn { region_id, horizon, variable, alpha };"
+      },
+      "name": "Validate Params",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://ml-service:8001/forecast/{{$json.region_id}}?horizon={{$json.horizon}}&variable={{$json.variable}}&alpha={{$json.alpha}}"
+      },
+      "name": "GET ml-service forecast",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const forecast = $input.item.json;\nreturn { breach_summary: { total_steps: 7, breach_days: 2, risk_level: 'high' }, forecast };"
+      },
+      "name": "Enrich Forecast",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            { "value1": "={{$json.breach_summary.risk_level}}", "value2": "high" }
+          ]
+        }
+      },
+      "name": "IF High Risk",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify($json)}}"
+      },
+      "name": "Respond Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify($json)}}"
+      },
+      "name": "Respond Webhook False",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 500]
+    }
+  ],
+  "connections": {
+    "Webhook GET /forecast": {
+      "main": [ [ { "node": "Validate Params", "type": "main", "index": 0 } ] ]
+    },
+    "Validate Params": {
+      "main": [ [ { "node": "GET ml-service forecast", "type": "main", "index": 0 } ] ]
+    },
+    "GET ml-service forecast": {
+      "main": [ [ { "node": "Enrich Forecast", "type": "main", "index": 0 } ] ]
+    },
+    "Enrich Forecast": {
+      "main": [ [ { "node": "IF High Risk", "type": "main", "index": 0 } ] ]
+    },
+    "IF High Risk": {
+      "main": [
+        [ { "node": "Respond Webhook", "type": "main", "index": 0 } ],
+        [ { "node": "Respond Webhook False", "type": "main", "index": 0 } ]
+      ]
+    }
+  }
+}

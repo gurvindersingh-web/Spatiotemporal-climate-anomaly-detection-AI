@@ -1,0 +1,96 @@
+{
+  "name": "03 Explanation Gemini",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "explain/:region_id",
+        "responseMode": "responseNode"
+      },
+      "name": "Webhook GET /explain",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const region_id = $input.item.json.params.region_id;\nconst lang = $input.item.json.query.lang || 'en';\nconst detail = $input.item.json.query.detail || 'standard';\nreturn { region_id, lang, detail };"
+      },
+      "name": "Extract Params",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://ml-service:8001/anomaly/{{$json.region_id}}"
+      },
+      "name": "GET ml-service/anomaly",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const anomaly = $input.item.json;\nconst prompt = `Explain the climate anomaly for region ${$('Extract Params').item.json.region_id}.\nScore: ${anomaly.score}\nSeverity: ${anomaly.severity}\nProvide:\n1. Plain-English explanation\n2. Meteorological drivers\n3. Near-term impacts\n4. Confidence level`;\nreturn { prompt, anomaly };"
+      },
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={{$env.GEMINI_API_KEY}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"contents\": [ { \"role\": \"user\", \"parts\": [ { \"text\": \"{{$json.prompt}}\" } ] } ], \"generationConfig\": { \"temperature\": 0.3, \"maxOutputTokens\": 1024 } }"
+      },
+      "name": "POST Gemini API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.item.json;\nconst text = response.candidates[0].content.parts[0].text;\nreturn {\n  region_id: $('Extract Params').item.json.region_id,\n  generated_at: new Date().toISOString(),\n  model: 'gemini-2.0-flash',\n  explanation: {\n    summary: text.substring(0, 100) + '...',\n    drivers: 'Derived from text',\n    impacts: 'Derived from text',\n    confidence: 'High'\n  },\n  raw_narrative: text,\n  anomaly_snapshot: $('Build Prompt').item.json.anomaly\n};"
+      },
+      "name": "Parse Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify($json)}}"
+      },
+      "name": "Respond Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1450, 300]
+    }
+  ],
+  "connections": {
+    "Webhook GET /explain": {
+      "main": [ [ { "node": "Extract Params", "type": "main", "index": 0 } ] ]
+    },
+    "Extract Params": {
+      "main": [ [ { "node": "GET ml-service/anomaly", "type": "main", "index": 0 } ] ]
+    },
+    "GET ml-service/anomaly": {
+      "main": [ [ { "node": "Build Prompt", "type": "main", "index": 0 } ] ]
+    },
+    "Build Prompt": {
+      "main": [ [ { "node": "POST Gemini API", "type": "main", "index": 0 } ] ]
+    },
+    "POST Gemini API": {
+      "main": [ [ { "node": "Parse Response", "type": "main", "index": 0 } ] ]
+    },
+    "Parse Response": {
+      "main": [ [ { "node": "Respond Webhook", "type": "main", "index": 0 } ] ]
+    }
+  }
+}

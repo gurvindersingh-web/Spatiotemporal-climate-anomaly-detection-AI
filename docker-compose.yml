@@ -1,27 +1,65 @@
+version: '3.8'
+
 services:
-  api:
-    build: .
+  n8n:
+    image: n8nio/n8n:latest
     ports:
-      - "8000:8000"
+      - "5678:5678"
     environment:
-      - CDS_API_KEY=${CDS_API_KEY:-}
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - REDIS_URL=redis://redis:6379/0
-      - DEBUG=true
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - DB_TYPE=sqlite
+      - GENERIC_TIMEZONE=Asia/Kolkata
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
     volumes:
-      - ./data:/app/data
-      - ./models:/app/models
+      - n8n_data:/home/node/.n8n
+      - ./n8n-workflows:/workflows:ro
     depends_on:
+      - ml-service
       - redis
-    restart: unless-stopped
+    networks:
+      - climateguard-net
+
+  ml-service:
+    build: 
+      context: .
+      dockerfile: Dockerfile.ml
+    expose:
+      - "8001"
+    environment:
+      - ML_SERVICE_PORT=8001
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ml_models:/app/models
+    networks:
+      - climateguard-net
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
-    restart: unless-stopped
+    networks:
+      - climateguard-net
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:5678/webhook
+    depends_on:
+      - n8n
+    networks:
+      - climateguard-net
+
+networks:
+  climateguard-net:
+    driver: bridge
 
 volumes:
+  n8n_data:
+  ml_models:
   redis_data:

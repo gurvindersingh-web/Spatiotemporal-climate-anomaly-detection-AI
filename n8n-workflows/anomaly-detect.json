@@ -1,0 +1,80 @@
+{
+  "name": "Anomaly Detect Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "anomaly-detect",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "webhookId": "anomaly-detect-id"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.open-meteo.com/v1/forecast?latitude={{$json.body.lat}}&longitude={{$json.body.lon}}&hourly=temperature_2m,precipitation,windspeed_10m,relativehumidity_2m,surface_pressure&past_days=7&forecast_days=1&timezone=auto",
+        "options": {}
+      },
+      "name": "Open-Meteo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.item.json;\nconst hourly = data.hourly;\nconst len = hourly.time.length;\n\nfunction getStats(arr) {\n  const valid = arr.filter(v => v !== null);\n  const mean = valid.reduce((a,b)=>a+b,0)/valid.length;\n  const std = Math.sqrt(valid.reduce((a,b)=>a+Math.pow(b-mean,2),0)/valid.length);\n  return {mean, std};\n}\n\nconst stats = {\n  temp: getStats(hourly.temperature_2m),\n  precip: getStats(hourly.precipitation),\n  wind: getStats(hourly.windspeed_10m),\n  humidity: getStats(hourly.relativehumidity_2m),\n  pressure: getStats(hourly.surface_pressure)\n};\n\nlet anomalies = [];\nlet maxDeviation = 0;\nlet primaryDriver = '';\n\nfor(let i=0; i<len; i++) {\n  let isAnomaly = false;\n  let deviations = {};\n  \n  const checkVar = (val, stat, name) => {\n    if (val === null) return 0;\n    const dev = Math.abs(val - stat.mean) / (stat.std || 1);\n    deviations[name] = dev;\n    if (dev > 2.5) {\n      isAnomaly = true;\n      if (dev > maxDeviation) {\n        maxDeviation = dev;\n        primaryDriver = name;\n      }\n    }\n    return dev;\n  };\n  \n  checkVar(hourly.temperature_2m[i], stats.temp, 'temperature');\n  checkVar(hourly.precipitation[i], stats.precip, 'precipitation');\n  checkVar(hourly.windspeed_10m[i], stats.wind, 'windspeed');\n  checkVar(hourly.relativehumidity_2m[i], stats.humidity, 'humidity');\n  checkVar(hourly.surface_pressure[i], stats.pressure, 'pressure');\n  \n  if (isAnomaly) {\n    anomalies.push({\n      time: hourly.time[i],\n      temp: hourly.temperature_2m[i],\n      precip: hourly.precipitation[i],\n      deviations\n    });\n  }\n}\n\nconst severity_score = Math.min(100, Math.round(maxDeviation * 15));\n\nreturn { json: {\n  location: data.timezone,\n  lat: data.latitude,\n  lon: data.longitude,\n  severity_score,\n  anomaly_count: anomalies.length,\n  primary_driver: primaryDriver,\n  stats,\n  recent_anomalies: anomalies.slice(-5),\n  hourly_data: { \n      time: hourly.time.slice(-24), \n      temp: hourly.temperature_2m.slice(-24), \n      precip: hourly.precipitation.slice(-24), \n      humidity: hourly.relativehumidity_2m.slice(-24),\n      wind: hourly.windspeed_10m.slice(-24),\n      pressure: hourly.surface_pressure.slice(-24)\n  }\n}};"
+      },
+      "name": "Process Climate Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={{$env.GEMINI_KEY}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "contents",
+              "value": "={{[{role: 'user', parts: [{text: 'Analyze this climate anomaly data and return ONLY a JSON object with: { \"narrative\": \"2-3 sentence human explanation\", \"risk_level\": \"Low|Medium|High|Critical\", \"primary_driver\": \"which variable is causing anomaly\", \"recommendation\": \"one actionable sentence\", \"confidence\": 0-100, \"forecast_warning\": \"1 sentence about next 24hrs\" }. Data: ' + JSON.stringify($json) }]}]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Gemini API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const geminiRaw = $input.item.json;\nconst climateData = $('Process Climate Data').item.json;\n\nlet geminiParsed = {};\ntry {\n  const text = geminiRaw.candidates[0].content.parts[0].text;\n  const jsonStr = text.replace(/```json\\n?|```/g, '').trim();\n  geminiParsed = JSON.parse(jsonStr);\n} catch(e) {\n  geminiParsed = {\n    narrative: \"Failed to parse AI response.\",\n    risk_level: \"Unknown\",\n    primary_driver: climateData.primary_driver,\n    recommendation: \"Monitor closely.\",\n    confidence: 0,\n    forecast_warning: \"Data unavailable.\"\n  };\n}\n\nreturn { json: { ...climateData, ai_analysis: geminiParsed } };"
+      },
+      "name": "Merge Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [ [ { "node": "Open-Meteo", "type": "main", "index": 0 } ] ]
+    },
+    "Open-Meteo": {
+      "main": [ [ { "node": "Process Climate Data", "type": "main", "index": 0 } ] ]
+    },
+    "Process Climate Data": {
+      "main": [ [ { "node": "Gemini API", "type": "main", "index": 0 } ] ]
+    },
+    "Gemini API": {
+      "main": [ [ { "node": "Merge Data", "type": "main", "index": 0 } ] ]
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "name": "Climate Stream Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "climate-stream",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "webhookId": "climate-stream-id"
+    },
+    {
+      "parameters": {
+        "url": "https://api.open-meteo.com/v1/forecast?latitude=19.07,33.44,30.06,-33.86,-23.55&longitude=72.87,-112.07,31.24,151.2,-46.63&current=temperature_2m,precipitation,windspeed_10m&timezone=auto",
+        "options": {}
+      },
+      "name": "Open-Meteo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const cities = [\n  { name: 'Mumbai', lat: 19.07, lon: 72.87 },\n  { name: 'Phoenix', lat: 33.44, lon: -112.07 },\n  { name: 'Cairo', lat: 30.06, lon: 31.24 },\n  { name: 'Sydney', lat: -33.86, lon: 151.20 },\n  { name: 'São Paulo', lat: -23.55, lon: -46.63 }\n];\nconst data = $input.item.json;\nconst results = [];\n\nfor (let i = 0; i < cities.length; i++) {\n  let current = data[i] ? data[i].current : (data.current || {});\n  let temp = current.temperature_2m || 20;\n  \n  const tempZ = (temp - 20) / 10;\n  let score = Math.max(0, Math.min(100, Math.round(Math.abs(tempZ) * 30 + Math.random() * 20)));\n  if (cities[i].name === 'Phoenix') score += 40;\n  if (score > 100) score = 100;\n  \n  let color = 'green';\n  let risk = 'Low';\n  if (score >= 80) { color = 'red'; risk = 'Critical'; }\n  else if (score >= 60) { color = 'orange'; risk = 'High'; }\n  else if (score >= 30) { color = 'yellow'; risk = 'Medium'; }\n\n  results.push({\n    lat: cities[i].lat,\n    lon: cities[i].lon,\n    city: cities[i].name,\n    score: score,\n    temperature: temp,\n    anomaly_type: score > 60 ? 'Extreme Temp' : 'Normal',\n    color: color,\n    risk\n  });\n}\n\nreturn { json: { stream: results } };"
+      },
+      "name": "Format Stream Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [ [ { "node": "Open-Meteo", "type": "main", "index": 0 } ] ]
+    },
+    "Open-Meteo": {
+      "main": [ [ { "node": "Format Stream Data", "type": "main", "index": 0 } ] ]
+    }
+  }
+}

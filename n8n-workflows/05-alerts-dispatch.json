@@ -1,0 +1,151 @@
+{
+  "name": "ClimateGuard - 05 Alerts & Dispatch",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "alerts",
+        "responseMode": "responseNode"
+      },
+      "name": "Webhook GET /alerts",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 200]
+    },
+    {
+      "parameters": {},
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [250, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const source = $('Webhook GET /alerts').item ? 'http' : 'internal';\nreturn { source, page: 1, per_page: 50, severity: 'extreme', region_id: null, since: null };"
+      },
+      "name": "Normalise",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://ml-service:8001/alerts?severity={{$json.severity}}"
+      },
+      "name": "GET ml-service alerts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const alerts = $input.item.json.alerts || [];\nconst extremes_for_dispatch = alerts.filter(a => a.severity === 'extreme');\nreturn { ...$input.item.json, extremes_for_dispatch };"
+      },
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            { "value1": "={{$json.extremes_for_dispatch.length}}", "operation": "larger", "value2": 0 }
+          ]
+        }
+      },
+      "name": "IF Extremes",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return { slack_msg: 'EXTREME ALERTS: ' + $json.extremes_for_dispatch.length };"
+      },
+      "name": "Build Slack Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1250, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.SLACK_WEBHOOK_URL}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"text\": \"{{$json.slack_msg}}\" }"
+      },
+      "name": "Send Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1450, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.DISCORD_WEBHOOK_URL}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"content\": \"{{$('Build Slack Message').item.json.slack_msg}}\" }"
+      },
+      "name": "Send Discord",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1650, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify($('Format Response').item.json)}}"
+      },
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1850, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify($json)}}"
+      },
+      "name": "Respond False",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 400]
+    }
+  ],
+  "connections": {
+    "Webhook GET /alerts": {
+      "main": [ [ { "node": "Normalise", "type": "main", "index": 0 } ] ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [ [ { "node": "Normalise", "type": "main", "index": 0 } ] ]
+    },
+    "Normalise": {
+      "main": [ [ { "node": "GET ml-service alerts", "type": "main", "index": 0 } ] ]
+    },
+    "GET ml-service alerts": {
+      "main": [ [ { "node": "Format Response", "type": "main", "index": 0 } ] ]
+    },
+    "Format Response": {
+      "main": [ [ { "node": "IF Extremes", "type": "main", "index": 0 } ] ]
+    },
+    "IF Extremes": {
+      "main": [
+        [ { "node": "Build Slack Message", "type": "main", "index": 0 } ],
+        [ { "node": "Respond False", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Build Slack Message": {
+      "main": [ [ { "node": "Send Slack", "type": "main", "index": 0 } ] ]
+    },
+    "Send Slack": {
+      "main": [ [ { "node": "Send Discord", "type": "main", "index": 0 } ] ]
+    },
+    "Send Discord": {
+      "main": [ [ { "node": "Respond 200", "type": "main", "index": 0 } ] ]
+    }
+  }
+}

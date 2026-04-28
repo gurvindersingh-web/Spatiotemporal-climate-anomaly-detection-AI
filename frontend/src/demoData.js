@@ -188,9 +188,52 @@ function generateDemoAlerts() {
   };
 }
 
+function generateDemoGridData(variable = 'T2M') {
+  const geojson = generateDemoGeoJSON();
+
+  const severityMap = {
+    watch: 'Watch',
+    warning: 'Warning',
+    extreme: 'Extreme',
+  };
+
+  const colorMap = {
+    Watch: '#ffdd57',
+    Warning: '#ffa502',
+    Extreme: '#ff4757',
+    Normal: '#2ed573',
+  };
+
+  const heatmapData = geojson.features.map((feature) => {
+    const classification = severityMap[feature.properties.classification] || 'Normal';
+    return {
+      lat: feature.properties.lat,
+      lng: feature.properties.lon,
+      zScore: feature.properties.zscore,
+      currentValue: parseFloat((feature.properties.anomaly_score * 10).toFixed(2)),
+      severity: classification,
+      color: colorMap[classification],
+      variable,
+    };
+  });
+
+  return {
+    variable,
+    bounds: { latMin: 5, latMax: 40, lngMin: 60, lngMax: 100 },
+    step: geojson.meta.grid_resolution,
+    totalPoints: geojson.features.length,
+    anomalyCount: geojson.meta.total_anomalies,
+    heatmapData,
+    anomalies: heatmapData.filter((point) => point.severity !== 'Normal'),
+    timestamp: new Date().toISOString(),
+    demo: true,
+  };
+}
+
 export {
   generateDemoGeoJSON,
   generateDemoExplanation,
   generateDemoForecast,
   generateDemoAlerts,
+  generateDemoGridData,
 };

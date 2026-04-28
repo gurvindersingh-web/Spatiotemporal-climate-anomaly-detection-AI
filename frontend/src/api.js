@@ -2,7 +2,7 @@
  * API Service — communicates with the FastAPI backend.
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 const WS_BASE = import.meta.env.VITE_WS_URL || '';
 
 class ApiService {
