@@ -8,6 +8,9 @@ const __dirname = path.dirname(__filename);
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    chunkSizeWarningLimit: 2500,
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
