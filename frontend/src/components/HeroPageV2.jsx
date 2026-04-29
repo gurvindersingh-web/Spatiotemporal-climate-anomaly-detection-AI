@@ -4,6 +4,7 @@ import { Canvas } from '@react-three/fiber';
 import R3FEarth from './R3FEarth';
 import { Activity, Wind, Thermometer, Satellite, ChevronRight, Globe, Layers, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import HudFrame from './HudFrame';
 
 export default function HeroPageV2({ onEnterDashboard, onEnterDetector }) {
   const [mounted, setMounted] = useState(false);
@@ -26,6 +27,9 @@ export default function HeroPageV2({ onEnterDashboard, onEnterDetector }) {
       {/* Cinematic Overlays */}
       <div className="absolute inset-0 z-10 pointer-events-none bg-gradient-to-b from-space-900/80 via-transparent to-space-900/90" />
       <div className="absolute inset-0 z-10 pointer-events-none bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-neon-purple/10 via-transparent to-transparent opacity-50" />
+
+      {/* HUD Edge Decorations */}
+      <HudFrame />
 
       {/* Top Navbar */}
       <header className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-6 bg-space-900/20 backdrop-blur-md border-b border-white/5">

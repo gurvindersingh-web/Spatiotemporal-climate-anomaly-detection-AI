@@ -28,6 +28,7 @@ models/*.pkl
 
 # ── Frontend build artifacts ──────────────────
 frontend/node_modules/
+backend/node_modules/
 frontend/dist/
 frontend/dist-ssr/
 

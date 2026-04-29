@@ -25,28 +25,6 @@ export default function ControlBar({
 }) {
   return (
     <div className="control-bar" id="control-bar">
-      {/* Search */}
-      <div className="control-group control-search">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            onSearch?.();
-          }}
-        >
-          <div className="search-input-wrapper">
-            <Search size={16} className="search-icon" />
-            <input
-              type="text"
-              placeholder="Search city or coordinates..."
-              value={searchQuery || ''}
-              onChange={(e) => onSearchChange?.(e.target.value)}
-              className="search-input"
-              id="city-search-input"
-            />
-          </div>
-        </form>
-      </div>
-
       {/* Variable selector */}
       <div className="control-group control-variables">
         {VARIABLES.map((v) => (

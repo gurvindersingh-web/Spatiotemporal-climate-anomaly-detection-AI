@@ -37,7 +37,7 @@ function makeMarkerIcon(color) {
   };
 }
 
-export default function GoogleLiveMap({ gridData, anomalies, latestAlert, onPointSelect }) {
+export default function GoogleLiveMap({ gridData, anomalies, latestAlert, onPointSelect, flyTarget, searchPin }) {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-maps-script',
@@ -55,13 +55,7 @@ export default function GoogleLiveMap({ gridData, anomalies, latestAlert, onPoin
 
   const liveGrid = useMemo(() => gridData || generateDemoGridData(), [gridData]);
   const markerPoints = useMemo(() => {
-    const points = anomalies?.length ? anomalies : liveGrid.anomalies || [];
-    // Filter to India-only markers
-    return points.filter((p) => {
-      const lat = getLat(p);
-      const lng = getLng(p);
-      return lat >= indianaBounds.south && lat <= indianaBounds.north && lng >= indianaBounds.west && lng <= indianaBounds.east;
-    });
+    return anomalies?.length ? anomalies : liveGrid.anomalies || [];
   }, [anomalies, liveGrid]);
 
   const googleMaps = isLoaded ? window.google?.maps : null;
@@ -109,14 +103,15 @@ export default function GoogleLiveMap({ gridData, anomalies, latestAlert, onPoin
         clustererRef.current.addMarkers(markers);
       }
     }
-
-    // Fit to India bounds
-    const bounds = new window.google.maps.LatLngBounds(
-      { lat: indianaBounds.south, lng: indianaBounds.west },
-      { lat: indianaBounds.north, lng: indianaBounds.east }
-    );
-    mapRef.current.fitBounds(bounds, 64);
   }, [markerPoints]);
+
+  /* ── FlyTo on search ── */
+  useEffect(() => {
+    if (flyTarget && mapRef.current) {
+      mapRef.current.panTo({ lat: flyTarget.lat, lng: flyTarget.lng });
+      mapRef.current.setZoom(10);
+    }
+  }, [flyTarget]);
 
   useEffect(() => {
     if (latestAlert) {
@@ -155,17 +150,13 @@ export default function GoogleLiveMap({ gridData, anomalies, latestAlert, onPoin
         center={defaultCenter}
         zoom={defaultZoom}
         options={{
-          mapTypeId: 'satellite',
+          mapTypeId: 'hybrid',
           disableDefaultUI: true,
           zoomControl: true,
           streetViewControl: false,
           fullscreenControl: false,
           clickableIcons: false,
           backgroundColor: '#080c14',
-          restriction: {
-            latLngBounds: indianaBounds,
-            strictBounds: false,
-          },
         }}
         onLoad={(map) => {
           mapRef.current = map;
@@ -204,6 +195,27 @@ export default function GoogleLiveMap({ gridData, anomalies, latestAlert, onPoin
               )}
             </div>
           </InfoWindowF>
+        )}
+
+        {/* Search pin overlay */}
+        {searchPin && (
+          <MarkerF
+            position={{ lat: searchPin.lat, lng: searchPin.lng }}
+            icon={{
+              url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" width="36" height="36">
+                  <circle cx="18" cy="18" r="12" fill="none" stroke="%2300d4ff" stroke-width="2" opacity="0.4">
+                    <animate attributeName="r" values="8;16;8" dur="2s" repeatCount="indefinite"/>
+                    <animate attributeName="opacity" values="0.6;0;0.6" dur="2s" repeatCount="indefinite"/>
+                  </circle>
+                  <circle cx="18" cy="18" r="6" fill="%2300d4ff" stroke="white" stroke-width="2"/>
+                </svg>
+              `)}`,
+              scaledSize: new window.google.maps.Size(36, 36),
+              anchor: new window.google.maps.Point(18, 18),
+            }}
+            title={searchPin.name}
+          />
         )}
       </GoogleMap>
 

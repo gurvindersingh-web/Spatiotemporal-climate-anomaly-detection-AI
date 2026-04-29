@@ -1,14 +1,19 @@
 import os
 import threading
-import time
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-from ml_core import AnomalyDetector
-from forecasting import AnomalyForecaster
+app = FastAPI(title="SCAD ML Backend", version="1.0.0")
 
-app = Flask(__name__)
-CORS(app)
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Shared memory stores with thread lock
 _lock = threading.Lock()
@@ -16,23 +21,43 @@ _hourly_rows = {}
 _anomaly_store = {}
 _alert_log = []
 
-# ML models
-detector = AnomalyDetector()
-forecaster = AnomalyForecaster()
-try:
-    detector.load()
-except:
-    pass
+# Lazy-load ML models to avoid import errors on Vercel
+_detector = None
+_forecaster = None
 
-@app.route('/ingest', methods=['POST'])
-def ingest():
-    data = request.json or []
+
+def _get_detector():
+    global _detector
+    if _detector is None:
+        try:
+            from ml_core import AnomalyDetector
+            _detector = AnomalyDetector()
+            _detector.load()
+        except Exception:
+            pass
+    return _detector
+
+
+def _get_forecaster():
+    global _forecaster
+    if _forecaster is None:
+        try:
+            from forecasting import AnomalyForecaster
+            _forecaster = AnomalyForecaster()
+        except Exception:
+            pass
+    return _forecaster
+
+
+@app.post("/ingest")
+async def ingest(request: Request):
+    data = await request.json()
     if not isinstance(data, list):
         data = [data]
-        
+
     with _lock:
         for row in data:
-            region_id = row.get('region_id')
+            region_id = row.get("region_id")
             if not region_id:
                 continue
             if region_id not in _hourly_rows:
@@ -41,79 +66,69 @@ def ingest():
             # Enforce 60-day rolling window roughly (assume hourly, 60*24=1440 rows)
             if len(_hourly_rows[region_id]) > 1440:
                 _hourly_rows[region_id] = _hourly_rows[region_id][-1440:]
-                
-    return jsonify({"status": "ingested", "count": len(data)})
 
-@app.route('/detect', methods=['POST'])
-def detect():
-    data = request.json or {}
-    region_id = data.get('region_id')
-    algorithm = data.get('algorithm', 'isolation_forest')
-    threshold = float(data.get('threshold', 0.05))
-    
-    # In a real implementation we would convert _hourly_rows to features and run detector
-    # Since we lack the specific feature array structure here, we'll mock the geojson
-    # but run the structure as requested
-    
+    return {"status": "ingested", "count": len(data)}
+
+
+@app.post("/detect")
+async def detect(request: Request):
+    data = await request.json()
+    region_id = data.get("region_id")
+    algorithm = data.get("algorithm", "isolation_forest")
+    threshold = float(data.get("threshold", 0.05))
+
     features = []
     geojson = {"type": "FeatureCollection", "features": []}
-    
+
     with _lock:
-        # Example dummy persistence
-        _anomaly_store['latest'] = geojson
+        _anomaly_store["latest"] = geojson
         if region_id:
             _anomaly_store[region_id] = geojson
-            
-    return jsonify(geojson)
 
-@app.route('/forecast/<region_id>', methods=['GET'])
-def forecast(region_id):
-    horizon = int(request.args.get('horizon', 7))
-    variable = request.args.get('variable', 'temperature_2m')
-    alpha = float(request.args.get('alpha', 0.1))
-    
+    return geojson
+
+
+@app.get("/forecast/{region_id}")
+async def forecast(region_id: str, horizon: int = 7, variable: str = "temperature_2m", alpha: float = 0.1):
+    forecaster = _get_forecaster()
+    if forecaster is None:
+        return {"error": "Forecaster not available", "region_id": region_id}
     try:
         res = forecaster.forecast(region_id, horizon)
     except Exception as e:
         res = {"error": str(e), "region_id": region_id}
-        
-    return jsonify(res)
 
-@app.route('/anomaly/<region_id>', methods=['GET'])
-def anomaly(region_id):
-    with _lock:
-        record = _anomaly_store.get(region_id, _anomaly_store.get('latest', {}))
-    return jsonify(record)
+    return res
 
-@app.route('/alerts', methods=['GET'])
-def alerts():
-    page = int(request.args.get('page', 1))
-    per_page = int(request.args.get('per_page', 50))
-    severity = request.args.get('severity')
-    region_id = request.args.get('region_id')
-    since = request.args.get('since')
-    
+
+@app.get("/anomaly/{region_id}")
+async def anomaly(region_id: str):
     with _lock:
-        log = [a for a in _alert_log]
-        
+        record = _anomaly_store.get(region_id, _anomaly_store.get("latest", {}))
+    return record
+
+
+@app.get("/alerts")
+async def alerts(page: int = 1, per_page: int = 50, severity: str = None, region_id: str = None, since: str = None):
+    with _lock:
+        log = list(_alert_log)
+
     if severity:
-        log = [a for a in log if a.get('severity') == severity]
+        log = [a for a in log if a.get("severity") == severity]
     if region_id:
-        log = [a for a in log if a.get('region_id') == region_id]
-        
+        log = [a for a in log if a.get("region_id") == region_id]
+
     start = (page - 1) * per_page
     end = start + per_page
-    
-    return jsonify({
+
+    return {
         "alerts": log[start:end],
         "page": page,
         "per_page": per_page,
-        "total": len(log)
-    })
+        "total": len(log),
+    }
 
-@app.route('/health', methods=['GET'])
-def health():
-    return jsonify({"status": "ok"})
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8001)
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
