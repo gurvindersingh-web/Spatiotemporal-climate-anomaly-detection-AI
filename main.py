@@ -95,8 +95,8 @@ async def forecast(region_id: str, horizon: int = 7, variable: str = "temperatur
         return {"error": "Forecaster not available", "region_id": region_id}
     try:
         res = forecaster.forecast(region_id, horizon)
-    except Exception as e:
-        res = {"error": str(e), "region_id": region_id}
+    except Exception:
+        res = {"error": "Internal server error", "region_id": region_id}
 
     return res
 
